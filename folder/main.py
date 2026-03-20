@@ -1,18 +1,19 @@
-import os
 from fastapi import FastAPI, Request
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+import os
 import google.generativeai as genai
 
 app = FastAPI()
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GMINI_API_KEY = os.getenv("GMINI_API_KEY")
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GEMINI_API_KEY = os.getenv("GMINI_API_KEY")
 
-genai.configure(api_key=GMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
 
-telegram_app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+telegram_app = ApplicationBuilder().token(TOKEN).build()
+
 SYSTEM_PROMPT = """
 You are a friendly, intelligent AI assistant chatting on Telegram.
 
@@ -36,23 +37,27 @@ Safety:
 - If you don’t know something, say so honestly
 - Don’t hallucinate facts
 """
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
-    prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
+# Start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Hi! I'm your AI bot 🤖")
+
+
+# Handle messages
+async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_msg = update.message.text
+    prompt = f"{SYSTEM_PROMPT}\nUser: {user_msg}\nAssistant:"
     response = model.generate_content(prompt)
-    reply = response.text
-
-    await update.message.reply_text(reply)
-
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    await update.message.reply_text(response.text)
 
 
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
+
+
+# 🚀 WEBHOOK ENDPOINT 
 @app.post("/")
-async def webhook(request: Request):
-    data = await request.json()
+async def webhook(req: Request):
+    data = await req.json()
     update = Update.de_json(data, telegram_app.bot)
-
-    await telegram_app.initialize()
     await telegram_app.process_update(update)
-
     return {"status": "ok"}
