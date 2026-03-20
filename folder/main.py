@@ -15,7 +15,7 @@ app = FastAPI()
 
 # -------------------- ENV VARIABLES --------------------
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # ✅ FIXED TYPO
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
 
 # -------------------- GEMINI SETUP --------------------
 genai.configure(api_key=GEMINI_API_KEY)
