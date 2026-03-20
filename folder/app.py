@@ -38,7 +38,7 @@ Safety:
 """
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
-    prompt = 
+    prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
     response = model.generate_content(prompt)
     reply = response.text
 
