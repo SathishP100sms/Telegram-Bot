@@ -55,9 +55,11 @@ telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle)
 
 
 # 🚀 WEBHOOK ENDPOINT 
-@app.post("/")
-async def webhook(req: Request):
-    data = await req.json()
-    update = Update.de_json(data, telegram_app.bot)
-    await telegram_app.process_update(update)
-    return {"status": "ok"}
+@app.post("/webhook")
+async def webhook(request: Request):
+    data = await request.json()
+
+    # process Telegram update
+    await telegram_app.process_update(Update.de_json(data, telegram_app.bot))
+
+    return {"ok": True}
