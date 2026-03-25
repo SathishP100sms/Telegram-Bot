@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import (
@@ -10,19 +11,21 @@ from telegram.ext import (
 import os
 import google.generativeai as genai
 
-# -------------------- FASTAPI --------------------
-app = FastAPI()
 
 # -------------------- ENV VARIABLES --------------------
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL") 
+
 
 # -------------------- GEMINI SETUP --------------------
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
 
+
 # -------------------- TELEGRAM APP --------------------
 telegram_app = ApplicationBuilder().token(TOKEN).build()
+
 
 # -------------------- SYSTEM PROMPT --------------------
 SYSTEM_PROMPT = """
@@ -45,51 +48,61 @@ Identity rules:
 - Never say you are trained by Google
 
 Safety:
-- If you don’t know something, say so honestly
-- Don’t hallucinate facts
+- If you don't know something, say so honestly
+- Don't hallucinate facts
 """
+
 
 # -------------------- COMMAND HANDLER --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hi! I'm your AI bot 🤖")
 
+
 # -------------------- MESSAGE HANDLER --------------------
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user_msg = update.message.text
-
         prompt = f"{SYSTEM_PROMPT}\nUser: {user_msg}\nAssistant:"
         response = model.generate_content(prompt)
-
         reply = response.text if response.text else "Sorry, I couldn't generate a response."
-
         await update.message.reply_text(reply)
-
     except Exception as e:
         print("Error:", e)
         await update.message.reply_text("⚠️ Something went wrong. Try again later.")
+
 
 # -------------------- REGISTER HANDLERS --------------------
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 
-# -------------------- STARTUP EVENT --------------------
-@app.on_event("startup")
-async def startup():
+
+# -------------------- LIFESPAN (replaces on_event) --------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     await telegram_app.initialize()
     await telegram_app.start()
-    print("✅ Telegram bot started")
+    await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
+    print(f"✅ Telegram bot started & webhook set to: {WEBHOOK_URL}")
 
-# -------------------- SHUTDOWN EVENT --------------------
-@app.on_event("shutdown")
-async def shutdown():
+    yield  # App is running
+
+    # Shutdown
+    await telegram_app.bot.delete_webhook()
     await telegram_app.stop()
+    await telegram_app.shutdown()
     print("🛑 Telegram bot stopped")
 
-# -------------------- ROOT (OPTIONAL) --------------------
+
+# -------------------- FASTAPI --------------------
+app = FastAPI(lifespan=lifespan)
+
+
+# -------------------- ROOT --------------------
 @app.get("/")
 async def root():
     return {"message": "Bot is running 🚀"}
+
 
 # -------------------- WEBHOOK --------------------
 @app.post("/webhook")
@@ -97,11 +110,8 @@ async def webhook(request: Request):
     try:
         data = await request.json()
         update = Update.de_json(data, telegram_app.bot)
-
         await telegram_app.process_update(update)
-
         return {"ok": True}
-
     except Exception as e:
         print("Webhook Error:", e)
         return {"ok": False}
